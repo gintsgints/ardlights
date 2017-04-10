@@ -1,5 +1,4 @@
-#include <ESP8266WiFi.h>
-#include <PubSubClient.h>
+#include <ESPHelper.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -15,12 +14,10 @@ Adafruit_SSD1306 display(OLED_RESET);
 
 #define PIN 10
 
-const char* ssid = "Your_network_id";
-const char* password = "Your_network_pw";
-const char* mqtt_server = "your_mqtt_server";
+netInfo homeNet = {.name = "HOME NETWORK", .mqtt = "your_mqtt_server", .mqtt_user = "mqtt-user", .mqtt_pass = "mqtt-password", .ssid = "your-network-id", .pass = "Your_network_pw"};
 
-WiFiClient espClient;
-PubSubClient client(espClient);
+ESPHelper myESP(&homeNet);
+
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(150, PIN, NEO_GRB + NEO_KHZ800);
 
 long lastMsg = 0;
@@ -41,31 +38,15 @@ void setup() {
   strip.begin();
   strip.show();
 
-  setup_wifi();
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
-}
+  myESP.OTA_enable();
+  myESP.OTA_setPassword("password_for_wireless_updates");
 
-void setup_wifi() {
-
-  delay(10);
-  // We start by connecting to a WiFi network
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-
-  WiFi.begin(ssid, password);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    display.print(".");
-    display.display();
-  }
+  myESP.addSubscription("stripe/color");
+  myESP.begin();
+  myESP.setCallback(callback);
 
   display.clearDisplay();
-  display.println("WiFi connected");
-  display.println("IP address: ");
-  display.println(WiFi.localIP());
+  display.println("Initialisation finished");
   display.display();
 }
 
@@ -81,29 +62,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
     inString += (char)payload[i];
   }
   display.println();
+  display.println("WiFi connected");
+  display.println("IP address: ");
+  display.println(myESP.getIP());
   display.display();
   colorWipe(inString.toInt(), 50);;
-}
-
-void reconnect() {
-  // Loop until we're reconnected
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Attempt to connect
-    if (client.connect("ESP8266Client")) {
-      Serial.println("connected");
-      // Once connected, publish an announcement...
-      client.publish("outTopic", "hello world");
-      // ... and resubscribe
-      client.subscribe("stripe/color");
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
-    }
-  }
 }
 
 // Fill the dots one after the other with a color
@@ -117,20 +80,8 @@ void colorWipe(uint32_t c, uint8_t wait) {
 
 
 void loop() {
-
-  if (!client.connected()) {
-    reconnect();
-  }
-  client.loop();
-
-  long now = millis();
-  if (now - lastMsg > 2000) {
-    lastMsg = now;
-    ++value;
-    snprintf (msg, 75, "hello world #%ld", value);
-    Serial.print("Publish message: ");
-    Serial.println(msg);
-    client.publish("outTopic", msg);
-  }
+  myESP.loop();  //run the loop() method as often as possible - this keeps the network services running
+  //Put application code here
+  yield();
 }
 
